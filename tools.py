@@ -1,3 +1,6 @@
+from typing import Optional, Literal
+from pydantic import BaseModel, Field
+
 from langchain_core.tools import tool, InjectedToolCallId
 from langchain.tools import InjectedState
 from langgraph.types import Command
@@ -8,81 +11,85 @@ from strAItegize_common.others.order import Order
 from strAItegize_common.others.recruitment_choice import RecruitmentChoice
 from strAItegize_common.others.order import describe_order
 
-# General-Agent Tools
-@tool
-def assign_order(
-    unit_id: str,
-    unit_order: Order,
-    state: Annotated[dict, InjectedState],
-    tool_call_id: Annotated[str, InjectedToolCallId]
-) -> Command:
-    """Assign chosen order to the specified unit."""
-
-    if unit_id not in state["controlled_units"].keys():
-        return f"Error: Unit {unit_id} does not exist."    
-
-    if state["controlled_units"][unit_id] is not None:
-        return f"Error: Unit {unit_id} has been already assigned an order."
-
-    return Command(
-        update={
-            "controlled_units": {
-                unit_id: unit_order
-            },
-            "general_messages": [
-                ToolMessage(
-                    content=f"Order to {unit_order.order_type} was properly assigned to unit {unit_id}.",
-                    tool_call_id=tool_call_id
-                )
-            ]
-        }
+class AgentPost(BaseModel):
+    author: str = Field(
+        description="Author agent of the posted message."
+    )
+    content: str = Field(
+        description="Text message posted in the message."
     )
 
-@tool
-def remove_order(
-    unit_id: str,
-    state: Annotated[dict, InjectedState],
-    tool_call_id: Annotated[str, InjectedToolCallId]
-) -> Command:
-    """Remove already assigned order from specified unit."""
-    if unit_id not in state["controlled_units"].keys():
-        return f"Error: Unit {unit_id} does not exist."    
-    
-    if state["controlled_units"][unit_id] is None:
-        return f"Error: Unit {unit_id} has not been assigned any orders yet."
-        
-    return Command(
-        update={
-            "controlled_units": {
-                unit_id: None
-            },
-            "general_messages": [
-                ToolMessage(
-                    content=f"The order was properly removed from unit {unit_id}.",
-                    tool_call_id=tool_call_id
-                )
-            ]
-        }
-    )
 
-# Leader-Agent Tools
-@tool
-def recruit_unit(
-    unit_type: str,
+# Federal Agent Tools
+@tool 
+def set_recruitment(
+    unit_type: Literal["light_infantry", "heavy_infantry", "cavalry", "none"],
     region: str,
     state: Annotated[dict, InjectedState],
     tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
-    """Recruit a unit of given type in the specified region."""
-    choice = RecruitmentChoice(unit_type=unit_type, region=region)
-    current_choices = state.get("recruitment_choice", [])
+    """Registering the recruitment choice to propose for the regional agents."""
+    recruitment_proposal = state["recruitment_proposal"]
+    
+    # Verifying the ownership over the region
+    if region not in state["regions"]:
+        return f"Error: The country does not control the {region} region. List of controlled regions: {state["regions"]}."
 
+    # Serving removal recrutment orders
+    if unit_type == "none":
+        recruitment_proposal[region] = None
+        
+        return Command(
+            update={
+                "recruitment_proposal": recruitment_proposal,
+                "federal_agent_messages": [
+                    ToolMessage(
+                        content=f"Properly removed the recruitment choice for {region} region from the recruitment proposal.",
+                        tool_call_id=tool_call_id
+                    )
+                ]
+            }
+        )
+
+    # Verifying that current recruitments does not exceed the supply surplus
+    # Need to remove the hard-coded part
+    spent_supplies = 0
+    for recruitment in recruitment_proposal.values():
+        if not recruitment:
+            continue
+        
+        if recruitment.unit_type == "light_infantry":
+            spent_supplies += 1
+        elif recruitment.unit_type == "heavy_infantry":
+            spent_supplies += 2
+        elif recruitment.unit_type == "cavalry":
+            spent_supplies += 3
+            
+    new_cost = 0
+    if recruitment.unit_type == "light_infantry":
+        new_cost = 1
+    elif recruitment.unit_type == "heavy_infantry":
+        new_cost = 2
+    elif recruitment.unit_type == "cavalry":
+        new_cost = 3
+    
+    if state["supply_surplus"] + new_cost < spent_supplies:
+        return f"Error: Cannot register new recruitment order, as it would exceed the total supply surplus: {state["supply_surplus"]}. Remaining supplies to spent: {state['supply_surplus'] - spent_supplies}."
+
+    # Registering the recruitment
+    recruitment_choice = RecruitmentChoice(
+        unit_type=unit_type,
+        region=region
+    )
+
+    recruitment_proposal[region] = recruitment_choice
+    
     return Command(
         update={
-            "recruitment_choice": current_choices + [choice],
-            "leader_messages": [
+            "recruitment_proposal": recruitment_proposal,
+            "federal_agent_messages": [
                 ToolMessage(
-                    content=f"The recruitment order for {unit_type} in {region} region, was properly registered.",
+                    content=f"The recruitment choice to recruit {unit_type} in region {region}, was properly assigned to the recruitment proposal.",
                     tool_call_id=tool_call_id
                 )
             ]
@@ -90,57 +97,143 @@ def recruit_unit(
     )
 
 @tool
-def delegate_general(
-    general_id: str,
-    command: str,
-    state: Annotated[dict, InjectedState],
-    tool_call_id: Annotated[str, InjectedToolCallId]
-) -> Command:
-    """Delegate tactical movement and attack orders to a General Agent."""
-    
-    # Verifying that the general exists
-    if general_id not in state["generals_messages"]:
-        return f"Error: General '{general_id}' does not exist. Available generals: {list(state['generals_units'].keys())}" 
-
-    # Initializing dict of controlled units for the general
-    controlled_units = {unit: None for unit in state["generals_units"][general_id]}
-
-    # Updating state
+def propose_recruitment(
+    tool_call_id: Annotated[str, InjectedToolCallId] 
+):
+    """Submit your recruitment choices for the voting among the federal agents."""
     return Command(
         update={
-            "active_general": general_id,
-            "general_id": general_id,
-            "received_orders": command,
-            "controlled_units": controlled_units,
-            "general_messages": state["generals_messages"].get(general_id),
-            "leader_messages": [
+            "federal_agent_messages": [
                 ToolMessage(
-                    content=f"The task was dispatched to General {general_id}.",
-                    name="delegate_general",
-                    tool_call_id=tool_call_id,
-                    id=f"tool_{tool_call_id}"
+                    content=f"Your recruitment choices have been submitted for discussion. Await the voting process results.",
+                    tool_call_id=tool_call_id
+                )
+            ]
+        }
+    )
+
+# Regional Agent Tools
+@tool
+def set_vote(
+    decision: bool,
+    tool_call_id: Annotated[str, InjectedToolCallId]
+) -> Command:
+    """Signal whether you agree with the recruitment choice proposed by the Federal Agent or not."""
+
+    return Command(
+        update={
+            "vote": decision,
+            "regional_messages": [
+                ToolMessage(
+                    content=f"Your vote: {decision}, has been submitted properly.",
+                    tool_call_id=tool_call_id
                 )
             ]
         }
     )
 
 @tool
+def post_message(
+    content: str,
+    state: Annotated[dict, InjectedState],
+    tool_call_id: Annotated[str, InjectedToolCallId]    
+) -> Command:
+    """Post message on the shared conversation with other agents."""
+    
+    shared_conversation = state["shared_conversation"]
+    
+    agent_post = AgentPost(
+        author=state["regional_id"],
+        content=content
+    )
+
+    shared_conversation.append(agent_post)
+
+    return Command(
+        update={
+            "shared_conversation": shared_conversation,
+            "regional_messages": [
+                ToolMessage(
+                    content=f"Your message: {content} was posted on the shared conversation.",
+                    tool_call_id=tool_call_id
+                )
+            ]
+        }
+    )
+
+@tool
+def assign_order(
+    unit_id: str,
+    order_type: Literal["move", "hold", "attack", "support"],
+    target_id: Optional[str],
+    move_q: Optional[int],
+    move_r: Optional[int],
+    move_s: Optional[int],
+    state: Annotated[dict, InjectedState],
+    tool_call_id: Annotated[str, InjectedToolCallId]
+) -> Command:
+    """Assign chosen order to the specified unit."""
+    # Verifying the unit ownership
+    if unit_id not in state["controlled_units"]:
+        return f"Error: You can only assign orders to the units controlled by you."
+    
+    # Verifying the movement order
+    if order_type == "move":
+        # Checking if movement coordinates are properly assigned
+        if not move_q or not move_r or not move_s:
+            return f"Error: Movement orders require q, r and s coordinates to be provided."
+        
+        # Checking the q + r + s = 0
+        if move_q + move_r + move_s != 0:
+            return f"Error: Movement coordinates need to sum up to 0."
+    
+    # Verifying the attack/support orders
+    elif order_type == "attack" or order_type == "support":
+        # Checking if target id is properly assigned
+        if not target_id:
+            return f"Error: Target id needs to be provided in case of attack/support orders"
+
+    order = Order(
+        order_type=order_type,
+        unit_id=unit_id,
+        target_id=target_id,
+        move_q=move_q,
+        move_r=move_r,
+        move_s=move_s
+    )
+    
+    controlled_units = state["controlled_units"]
+    controlled_units[unit_id] = order
+
+    return Command(
+        update={
+            "controlled_units": controlled_units,
+            "regional_messages": [
+                ToolMessage(
+                    content=f"The order {order_type} for the unit {unit_id} was properly assigned.",
+                    tool_call_id=tool_call_id
+                )
+            ]
+        },
+    )
+
+@tool
 def get_order_list(state: Annotated[dict, InjectedState]) -> str:
-    """Read the current list of orders given to the units.
+    """Read the currently assigned orders of your units.
 
     Returns:
-        The list of orders assigned this round.
+        The list of orders assigned to your units.
     """
-    order_list = state["order_list"]
+    controlled_units = state["controlled_units"]
 
     # Formatting the tool output to be more readable for the LLM
-    if len(order_list) > 0:
+    if len(controlled_units) > 0:
         observation = f"Currently assigned orders:\r\n"
-        for order in order_list:
+        for order in controlled_units.values():
             observation += f"- {describe_order(order)};"
         observation += "."
     else:
-        observation = "There are no orders yet, assigned to your units."
+        observation = "There are no orders assigned to your units."
 
     return observation
 
