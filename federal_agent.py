@@ -1,13 +1,13 @@
 from langchain_core.runnables import RunnableConfig
 from langchain.messages import SystemMessage
 
-from states import DecentralizedState
+from states import DecentralizedDebateState
 from prompts import federal_agent_prompt
 
 from strAItegize_common.others.human import human
 
 def get_federal_agent(tools: list, model):
-    def federal_agent(state: DecentralizedState, config: RunnableConfig) -> DecentralizedState:
+    def federal_agent(state: DecentralizedDebateState, config: RunnableConfig) -> DecentralizedDebateState:
         configurable = config.get("configurable", {})
         is_human = configurable.get("human_mode", False)
         

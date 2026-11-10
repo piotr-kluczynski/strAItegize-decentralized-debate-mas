@@ -1,4 +1,4 @@
-from typing import TypedDict, Annotated, Sequence, List, Optional
+from typing import TypedDict, Annotated, Sequence, List, Optional, Literal
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage
 
@@ -7,7 +7,7 @@ from tools import AgentPost
 from strAItegize_common.others.recruitment_choice import RecruitmentChoice
 from strAItegize_common.others.order import Order
 
-class DecentralizedState(TypedDict):
+class DecentralizedDebateState(TypedDict):
     units: List[str]
     regions: List[str]
     recent_events: List[str]
@@ -20,6 +20,7 @@ class DecentralizedState(TypedDict):
     init_msg: str
     blocked_tools: list[str]
     
+    regions_units: dict[str, list[str]]
     units_orders: dict[str, Order]
     region_recruitment: dict[str, RecruitmentChoice]
     
@@ -28,6 +29,11 @@ class DecentralizedState(TypedDict):
     shared_conversation: list[AgentPost]
 
     # Navigation variables
+    next_action: Literal["federal_agent", "regional_agent", "agent_output_node"]
+    agent_activity: bool
+    current_voting_turn: int
+    voting_turn_limit: int
+    current_turn: int
     turn_limit: int
     active_agent: str
 
@@ -41,10 +47,13 @@ class DecentralizedState(TypedDict):
     # Shared channels with RegionalState
     regional_id: Optional[str]
     vote: Optional[bool]
-    controlled_units: Optional[List[str]]
+    controlled_units: Optional[dict[str, Order]]
     regional_messages: Optional[Annotated[Sequence[BaseMessage], add_messages]]
 
 class RegionalState(TypedDict):
+    player_id: str
+    agent_activity: bool
+    regions_units: dict[str, list[str]]
     shared_conversation: list[AgentPost]
     
     regional_id: str

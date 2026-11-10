@@ -19,6 +19,34 @@ class AgentPost(BaseModel):
         description="Text message posted in the message."
     )
 
+@tool
+def post_message(
+    content: str,
+    state: Annotated[dict, InjectedState],
+    tool_call_id: Annotated[str, InjectedToolCallId]    
+) -> Command:
+    """Post message on the shared conversation with other agents."""
+    
+    shared_conversation = state["shared_conversation"]
+    
+    agent_post = AgentPost(
+        author=state["regional_id"],
+        content=content
+    )
+
+    shared_conversation.append(agent_post)
+
+    return Command(
+        update={
+            "shared_conversation": shared_conversation,
+            "regional_messages": [
+                ToolMessage(
+                    content=f"Your message: {content} was posted on the shared conversation.",
+                    tool_call_id=tool_call_id
+                )
+            ]
+        }
+    )
 
 # Federal Agent Tools
 @tool 
@@ -96,21 +124,6 @@ def set_recruitment(
         }
     )
 
-@tool
-def propose_recruitment(
-    tool_call_id: Annotated[str, InjectedToolCallId] 
-):
-    """Submit your recruitment choices for the voting among the federal agents."""
-    return Command(
-        update={
-            "federal_agent_messages": [
-                ToolMessage(
-                    content=f"Your recruitment choices have been submitted for discussion. Await the voting process results.",
-                    tool_call_id=tool_call_id
-                )
-            ]
-        }
-    )
 
 # Regional Agent Tools
 @tool
@@ -126,35 +139,6 @@ def set_vote(
             "regional_messages": [
                 ToolMessage(
                     content=f"Your vote: {decision}, has been submitted properly.",
-                    tool_call_id=tool_call_id
-                )
-            ]
-        }
-    )
-
-@tool
-def post_message(
-    content: str,
-    state: Annotated[dict, InjectedState],
-    tool_call_id: Annotated[str, InjectedToolCallId]    
-) -> Command:
-    """Post message on the shared conversation with other agents."""
-    
-    shared_conversation = state["shared_conversation"]
-    
-    agent_post = AgentPost(
-        author=state["regional_id"],
-        content=content
-    )
-
-    shared_conversation.append(agent_post)
-
-    return Command(
-        update={
-            "shared_conversation": shared_conversation,
-            "regional_messages": [
-                ToolMessage(
-                    content=f"Your message: {content} was posted on the shared conversation.",
                     tool_call_id=tool_call_id
                 )
             ]
