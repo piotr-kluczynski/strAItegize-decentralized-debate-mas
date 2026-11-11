@@ -16,7 +16,8 @@ def get_federal_agent(tools: list, model):
         model_with_tools = model.bind_tools(active_tools)
         
         message_list = [SystemMessage(content=federal_agent_prompt(
-            
+            player_id=state["player_id"],
+            regions_units=state["regions_units"]
         )
         )] + state["federal_agent_messages"]
         

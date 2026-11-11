@@ -17,7 +17,7 @@ def get_regional_agent(tools: list, model):
         
         message_list = [SystemMessage(content=regional_agent_prompt(
             player_id=state["player_id"],
-            region_id=state["regional_id"],
+            region_id=state["current_agent_id"],
             controlled_unit_orders=state["controlled_units"],
             regions_units=state["regions_units"]
         )
@@ -27,7 +27,7 @@ def get_regional_agent(tools: list, model):
             return {
                 "regional_messages": human(
                     message_list,
-                    agent_name=state["regional_id"],
+                    agent_name=state["current_agent_id"],
                     tools=active_tools
                 )
             }

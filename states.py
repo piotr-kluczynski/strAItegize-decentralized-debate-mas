@@ -8,55 +8,55 @@ from strAItegize_common.others.recruitment_choice import RecruitmentChoice
 from strAItegize_common.others.order import Order
 
 class DecentralizedDebateState(TypedDict):
-    units: List[str]
-    regions: List[str]
-    recent_events: List[str]
-    
-    input_prompt: Optional[BaseMessage]
-    upkeep_phase: bool = False
-    supply_surplus: int = 0
-    
+    # Simulation data
     player_id: str
+    units: list[str]
+    regions: list[str]
+    upkeep_phase: bool
+    supply_surplus: int
+    recent_events: list[str]
     init_msg: str
-    blocked_tools: list[str]
+    input_prompt: Optional[BaseMessage]
     
+    # Unit & region assignment
     regions_units: dict[str, list[str]]
     units_orders: dict[str, Order]
     region_recruitment: dict[str, RecruitmentChoice]
     
+    # Message logs, debate board & blocked tools
     federal_agent_messages: Annotated[Sequence[BaseMessage], add_messages]
     regional_agents_messages: dict[str, list[BaseMessage]]
     shared_conversation: list[AgentPost]
-
-    # Navigation variables
-    next_action: Literal["federal_agent", "regional_agent", "agent_output_node"]
-    agent_activity: bool
-    current_voting_turn: int
-    voting_turn_limit: int
-    current_turn: int
-    turn_limit: int
-    active_agent: str
-
+    blocked_tools: list[str]
+    
+    # Voting & proposals
+    recruitment_proposal: Optional[dict[str, RecruitmentChoice]]
+    agents_votes: dict[str, bool]
+    
+    # Turn queue & quiescence
     active_agents: list[str]
     finished_agents: list[str]
+    current_turn: int
+    current_voting_turn: int
+    turn_limit: int
+    voting_turn_limit: int
+    last_cycle_activity: int
+    next_action: Literal["federal_agent", "regional_agent", "end"]
     
-    # Voting behaviour
-    agents_votes: dict[str, bool]
-    recruitment_proposal: dict[str, RecruitmentChoice]
-
-    # Shared channels with RegionalState
-    regional_id: Optional[str]
+    # Subgraph channel for active regional agent
+    current_agent_id: Optional[str]
     vote: Optional[bool]
     controlled_units: Optional[dict[str, Order]]
     regional_messages: Optional[Annotated[Sequence[BaseMessage], add_messages]]
 
-class RegionalState(TypedDict):
-    player_id: str
-    agent_activity: bool
-    regions_units: dict[str, list[str]]
-    shared_conversation: list[AgentPost]
-    
-    regional_id: str
+class RegionalState(TypedDict):  
+    current_agent_id: str
     vote: bool
     controlled_units: dict[str, Order]
     regional_messages: Annotated[Sequence[BaseMessage], add_messages]
+    
+    # Channel for additional information
+    player_id: str
+    blocked_tools: list[str]
+    regions_units: dict[str, list[str]]
+    shared_conversation: list[AgentPost]

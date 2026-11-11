@@ -5,6 +5,32 @@ from states import AgentPost
 from strAItegize_common.others.recruitment_choice import RecruitmentChoice
 from strAItegize_common.others.order import Order, describe_order
 
+def conversation_prompt(conversation: list[AgentPost]) -> str:
+    if len(conversation) == 0:
+        return "No messages were posted on the shared conversation yet."
+    
+    conversation_text = """Shared conversation:
+    """
+    for post in conversation:
+        conversation_text += f"[{post.author}] {post.content}\r\n" 
+    
+    return conversation_text
+
+def voting_result_prompt(outcome: bool, current_turn: int, turn_limit: int) -> str:
+    voting_result = f"""The {current_turn}th voting turn (out of {turn_limit} turns) have concluded!
+    """
+    
+    if outcome:
+        voting_result += "The regional agents have voted to accept the proposed recruitment plan, which will be implemented."
+    else:
+        voting_result += "The regional agents have voted to reject the proposed recruitment plan.\r\n"
+        if current_turn == (turn_limit - 1):
+            voting_result += "As it was the last voting turn, and no recruitment plan was accepted, there will be no recruitment this upkeep phase."
+        else:
+            voting_result += "Federal Agent will now be called to read your conversation, and rethink the proposed recruitment plan, afterwhich new voting turn will begin."
+
+    return voting_result
+
 def regional_agent_prompt(player_id: str, region_id: str, controlled_unit_orders: dict[str, Optional[Order]], regions_units: dict[str, list[str]]) -> str:
     regional_instructions = f"""
     You are the governor of one of your country regions within the simulation.
@@ -38,8 +64,8 @@ def regional_agent_prompt(player_id: str, region_id: str, controlled_unit_orders
     Your country consists out of the following Region Agents, alongside the units under their control:
     """
     for region, units in regions_units.items():
-        unit_list = [f"{unit}, " for unit in units]
-        regional_instructions += f"- {region}: {unit_list}\r\n"
+        unit_str = ", ".join(units) if units else "no units assigned"
+        regional_instructions += f"- {region}: {unit_str}\r\n"
         
     regional_instructions += """
     </Current Gamestate>
@@ -64,6 +90,40 @@ def regional_agent_prompt(player_id: str, region_id: str, controlled_unit_orders
     </Instructions>
     """
     return regional_instructions
+
+def regional_agent_voting_prompt(recruitment_proposal: dict[str, RecruitmentChoice], votes: dict[str, bool], current_turn: int, turn_limit: int) -> str:
+    voting_instructions = f"""The voting process is in progress. 
+    The Federal Agent has analysed the country situation, and decided upon the recruitment within chosen regions.
+    Now it is your turn, to vote for, or against the proposed plan. Analyse the simulation state, communicate with other agents,
+    and decide whether proposed plan will lead to good outcomes.
+    
+    If you decide to reject the recruitment plan, the Federal Agent will have a chance to correct their judgement,
+    and reassign the recruitment. However, if the dispute won't be settled after {turn_limit} turns, no recruitment will be conducted.
+    """
+    
+    voting_instructions += f"Voting turn: {current_turn}/{turn_limit}.\r\n"
+
+    voting_instructions += "Recruitment Proposal:\r\n"
+    for region, recruitment in recruitment_proposal.items():
+        voting_instructions += f"- {region}: "
+        
+        if not recruitment:
+            voting_instructions += "no recruitment,\r\n"
+        else:
+            voting_instructions += f"{recruitment.unit_type},\r\n"
+
+    voting_instructions += "\r\nCurrent voting results: "
+    for agent, vote in votes.items():
+        voting_instructions += f"{agent}: "
+        
+        if vote is None:
+            voting_instructions += "not decided yet, "
+        elif vote is True:
+            voting_instructions += "Yes, "
+        elif vote is False:
+            voting_instructions += "No, "
+    
+    return voting_instructions
 
 def federal_agent_prompt(player_id: str, regions_units: dict[str, list[str]]) -> str:
     federal_instructions = f"""
@@ -95,8 +155,8 @@ def federal_agent_prompt(player_id: str, regions_units: dict[str, list[str]]) ->
     Your country consists out of the following regional agents, alongside the list of units under their command:
     """
     for region, units in regions_units.items():
-        unit_list = [f"{unit}, " for unit in units]
-        regional_instructions += f"- {region}: {unit_list}\r\n"
+        unit_str = ", ".join(units) if units else "no units assigned"
+        federal_instructions += f"- {region}: {unit_str}\r\n"
     
     federal_instructions += """
     </Current Gamestate>
@@ -123,4 +183,17 @@ def federal_agent_prompt(player_id: str, regions_units: dict[str, list[str]]) ->
     
     return federal_instructions
     
+def federal_agent_voting_prompt(current_turn: int, turn_limit: int) -> str:
+    voting_instructions = f"""The {current_turn} voting turn has begun.
+    You are responsible for preparing the recruitment plan for the entire country, 
+    after which regional agents will communicate and vote for or against your plan.
     
+    If the plan is accepted, the voting procedure will end, and the recruitment will proceed according to agreed decisions.
+    Otherwise, the new voting turn will begin, allowing you to read regional's agents conversation on your previous plans, 
+    and modify your plan to meet their needs. 
+    
+    However, if the recruitment plan won't be chosen in less than {turn_limit} turns, the voting process will stop, 
+    and no recruitment will be chosen for this upkeep phase.
+    """
+    
+    return voting_instructions

@@ -30,7 +30,7 @@ def post_message(
     shared_conversation = state["shared_conversation"]
     
     agent_post = AgentPost(
-        author=state["regional_id"],
+        author=state["current_agent_id"],
         content=content
     )
 
@@ -57,7 +57,7 @@ def set_recruitment(
     tool_call_id: Annotated[str, InjectedToolCallId]
 ) -> Command:
     """Registering the recruitment choice to propose for the regional agents."""
-    recruitment_proposal = state["recruitment_proposal"]
+    recruitment_proposal = state.get("recruitment_proposal") or {}
     
     # Verifying the ownership over the region
     if region not in state["regions"]:
@@ -93,14 +93,7 @@ def set_recruitment(
         elif recruitment.unit_type == "cavalry":
             spent_supplies += 3
             
-    new_cost = 0
-    if recruitment.unit_type == "light_infantry":
-        new_cost = 1
-    elif recruitment.unit_type == "heavy_infantry":
-        new_cost = 2
-    elif recruitment.unit_type == "cavalry":
-        new_cost = 3
-    
+    new_cost = {"light_infantry": 1, "heavy_infantry": 2, "cavalry": 3}.get(unit_type, 0)    
     if state["supply_surplus"] + new_cost < spent_supplies:
         return f"Error: Cannot register new recruitment order, as it would exceed the total supply surplus: {state["supply_surplus"]}. Remaining supplies to spent: {state['supply_surplus'] - spent_supplies}."
 
@@ -164,7 +157,7 @@ def assign_order(
     # Verifying the movement order
     if order_type == "move":
         # Checking if movement coordinates are properly assigned
-        if not move_q or not move_r or not move_s:
+        if move_q is None or move_r is None or move_s is None:
             return f"Error: Movement orders require q, r and s coordinates to be provided."
         
         # Checking the q + r + s = 0
@@ -208,7 +201,7 @@ def get_order_list(state: Annotated[dict, InjectedState]) -> str:
     Returns:
         The list of orders assigned to your units.
     """
-    controlled_units = state["controlled_units"]
+    controlled_units = state.get("controlled_units") or {}
 
     # Formatting the tool output to be more readable for the LLM
     if len(controlled_units) > 0:
