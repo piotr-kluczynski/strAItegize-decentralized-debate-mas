@@ -7,9 +7,8 @@ from langgraph.types import Command
 from langchain.messages import ToolMessage
 from typing import Annotated
 
-from strAItegize_common.others.order import Order
 from strAItegize_common.others.recruitment_choice import RecruitmentChoice
-from strAItegize_common.others.order import describe_order
+from strAItegize_common.others.order import Order, describe_order
 
 class AgentPost(BaseModel):
     author: str = Field(
